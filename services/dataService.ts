@@ -1,14 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Supabase configuration
-const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
+// Supabase configuration - Fixed to use import.meta.env and correct variable names
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 let supabase: any = null;
 
 // Initialize Supabase client if credentials are available
 if (supabaseUrl && supabaseKey) {
   supabase = createClient(supabaseUrl, supabaseKey);
+  console.log('Supabase client initialized successfully');
+} else {
+  console.warn('Supabase credentials missing:', { supabaseUrl: !!supabaseUrl, supabaseKey: !!supabaseKey });
 }
 
 // Mock data for non-sales departments
@@ -106,16 +109,32 @@ const fetchFromSupabase = async (queryTitle: string): Promise<any[]> => {
     return generateMockSalesData(queryTitle);
   }
 
+  // Only call Supabase for the one RPC function that exists
+  if (queryTitle !== "Top Selling Products") {
+    console.log("Using mock data for non-implemented RPC:", queryTitle);
+    return generateMockSalesData(queryTitle);
+  }
+
   try {
     console.log("Calling Supabase RPC:", rpcFunction);
-    const { data, error } = await supabase.rpc(rpcFunction);
+    console.log("Testing direct table access first...");
+    
+    // Test direct table access
+    const tableTest = await supabase.from('sales_data').select('*').limit(1);
+    console.log("Direct table access test:", tableTest);
+    
+    const result = await supabase.rpc(rpcFunction, {});
+    console.log("Raw Supabase response:", result);
+    
+    const { data, error } = result;
     
     if (error) {
       console.error("Supabase RPC error:", error);
       return generateMockSalesData(queryTitle);
     }
 
-    console.log("Supabase RPC response:", data);
+    console.log("🎉 SUCCESS: get_top_products_by_revenue returned data:", data);
+    console.log("Data type:", typeof data, "Is array:", Array.isArray(data), "Length:", data?.length);
     
     // If no data returned, use mock data
     if (!data || data.length === 0) {
