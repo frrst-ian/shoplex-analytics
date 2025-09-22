@@ -1,7 +1,17 @@
+import { createClient } from '@supabase/supabase-js';
 
-// This is a mock data service.
-// In a real application, this would connect to Supabase.
+// Supabase configuration
+const supabaseUrl = process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
 
+let supabase: any = null;
+
+// Initialize Supabase client if credentials are available
+if (supabaseUrl && supabaseKey) {
+  supabase = createClient(supabaseUrl, supabaseKey);
+}
+
+// Mock data for non-sales departments
 const MOCK_PRODUCTS = ["Quantum Laptop", "Astro Smartphone", "Nova Tablet", "Galaxy Projector", "Orion Headphones"];
 const MOCK_CUSTOMERS = ["Alex Reyes", "Ben Santos", "Chris Villanueva", "Dana Gomez", "Eli Cruz", "Faye Mercado", "Gabe Lorenzo", "Hannah Ignacio", "Ian David", "Jane Garcia"];
 const MOCK_CAMPAIGNS = ["Summer Sale '24", "Cyber Monday", "11.11 Big Sale", "Holiday Deals"];
@@ -9,14 +19,29 @@ const MOCK_PAYMENT_METHODS = ["Credit Card", "GCash", "PayPal", "Bank Transfer",
 const MOCK_PLATFORMS = ["Website", "Mobile App", "Physical Store"];
 const MOCK_PAYMENT_STATUS = ["Paid", "Pending", "Failed"];
 
-const generateRandomSalesData = (queryTitle: string): any[] => {
+// Supabase RPC function mappings
+const SUPABASE_RPC_MAP: { [key: string]: string } = {
+  "Top Selling Products": "get_top_products_by_revenue",
+  "Daily Revenue Trends": "get_daily_revenue_trends",
+  "Payments by Method": "get_payments_by_method",
+  "Top 10 Customers by Spending": "get_top_customers_by_spending",
+  "Campaign Performance": "get_campaign_performance",
+  "Revenue by Platform": "get_revenue_by_platform",
+  "Orders by Payment Status": "get_orders_by_payment_status"
+};
+
+const generateMockSalesData = (queryTitle: string): any[] => {
   switch (queryTitle) {
     case "Top Selling Products":
-      return MOCK_PRODUCTS.map(p => ({
-        product_name: p,
-        total_units_sold: Math.floor(Math.random() * 500) + 50,
-        total_revenue: Math.floor(Math.random() * 50000) + 10000,
-      })).sort((a, b) => b.total_revenue - a.total_revenue);
+      return [
+        { product_name: "Electric Toothbrush", total_units_sold: 27, total_revenue: 1350.00 },
+        { product_name: "Whitening Gel", total_units_sold: 40, total_revenue: 600.00 },
+        { product_name: "Mouthwash", total_units_sold: 81, total_revenue: 567.00 },
+        { product_name: "Kids Toothpaste", total_units_sold: 43, total_revenue: 172.00 },
+        { product_name: "Toothbrush", total_units_sold: 28, total_revenue: 154.00 },
+        { product_name: "Toothpaste", total_units_sold: 30, total_revenue: 105.00 },
+        { product_name: "Floss", total_units_sold: 50, total_revenue: 100.00 }
+      ];
 
     case "Daily Revenue Trends":
       return Array.from({ length: 30 }, (_, i) => {
@@ -37,7 +62,7 @@ const generateRandomSalesData = (queryTitle: string): any[] => {
       }));
     
     case "Top 10 Customers by Spending":
-       return MOCK_CUSTOMERS.map(c => ({
+       return MOCK_CUSTOMERS.slice(0, 10).map(c => ({
         customer_name: c,
         total_spent: Math.floor(Math.random() * 5000) + 1000,
         orders_made: Math.floor(Math.random() * 20) + 2,
@@ -69,34 +94,73 @@ const generateRandomSalesData = (queryTitle: string): any[] => {
   }
 };
 
+const fetchFromSupabase = async (queryTitle: string): Promise<any[]> => {
+  if (!supabase) {
+    console.log("Supabase not configured, using mock data for:", queryTitle);
+    return generateMockSalesData(queryTitle);
+  }
 
-export const fetchData = (sql: string, queryTitle: string): Promise<any[]> => {
+  const rpcFunction = SUPABASE_RPC_MAP[queryTitle];
+  if (!rpcFunction) {
+    console.log("No RPC function mapped for:", queryTitle);
+    return generateMockSalesData(queryTitle);
+  }
+
+  try {
+    console.log("Calling Supabase RPC:", rpcFunction);
+    const { data, error } = await supabase.rpc(rpcFunction);
+    
+    if (error) {
+      console.error("Supabase RPC error:", error);
+      return generateMockSalesData(queryTitle);
+    }
+
+    console.log("Supabase RPC response:", data);
+    
+    // If no data returned, use mock data
+    if (!data || data.length === 0) {
+      console.log("No data from Supabase, using mock data for:", queryTitle);
+      return generateMockSalesData(queryTitle);
+    }
+
+    return data;
+  } catch (err) {
+    console.error("Error calling Supabase:", err);
+    return generateMockSalesData(queryTitle);
+  }
+};
+
+export const fetchData = async (sql: string, queryTitle: string): Promise<any[]> => {
   console.log("Executing Query for:", queryTitle);
 
+  // Sales queries - try Supabase first, fallback to mock
+  if (sql.includes("sales_data") || SUPABASE_RPC_MAP[queryTitle]) {
+    return await fetchFromSupabase(queryTitle);
+  }
+
+  // Non-sales queries - use mock data
   return new Promise(resolve => {
     setTimeout(() => {
-      if (sql.includes("sales_data")) {
-        resolve(generateRandomSalesData(queryTitle));
-      } else if (queryTitle === "Sample Inventory Levels") {
+      if (queryTitle === "Sample Inventory Levels") {
         resolve([
-            { location: 'Manila Warehouse', category: 'Electronics', stock_count: 540 },
-            { location: 'Cebu Distribution', category: 'Home & Kitchen', stock_count: 320 },
-            { location: 'Davao Service Center', category: 'Fashion & Clothing', stock_count: 120 },
+          { location: 'Manila Warehouse', category: 'Electronics', stock_count: 540 },
+          { location: 'Cebu Distribution', category: 'Home & Kitchen', stock_count: 320 },
+          { location: 'Davao Service Center', category: 'Fashion & Clothing', stock_count: 120 },
         ]);
       } else if (queryTitle === "Sample Ticket Resolution") {
         resolve([
-            { branch: 'Quezon City', tickets_open: 85, tickets_resolved: 420 },
-            { branch: 'Iloilo Hub', tickets_open: 60, tickets_resolved: 390 },
+          { branch: 'Quezon City', tickets_open: 85, tickets_resolved: 420 },
+          { branch: 'Iloilo Hub', tickets_open: 60, tickets_resolved: 390 },
         ]);
       } else if (queryTitle === "Mock Profit Margins by Department") {
         resolve([
-           { department: 'Sales & Marketing', revenue: 1250000, expenses: 870000, profit: 380000 },
-           { department: 'Inventory', revenue: 980000, expenses: 700000, profit: 280000 },
-           { department: 'Customer Service', revenue: 320000, expenses: 210000, profit: 110000 },
+          { department: 'Sales & Marketing', revenue: 1250000, expenses: 870000, profit: 380000 },
+          { department: 'Inventory', revenue: 980000, expenses: 700000, profit: 280000 },
+          { department: 'Customer Service', revenue: 320000, expenses: 210000, profit: 110000 },
         ]);
       } else {
         resolve([]);
       }
-    }, 500 + Math.random() * 1000); // Simulate network delay
+    }, 500 + Math.random() * 1000);
   });
 };
