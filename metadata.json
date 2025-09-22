@@ -1,0 +1,5 @@
+{
+  "name": "Shoplex Analytics Assistant",
+  "description": "An AI-powered business intelligence assistant for Shoplex. Provides departmental dashboards (Sales, Inventory, Customer Service, Finance) using Supabase as the primary data source. Sales data is live from Supabase; other departments currently use mock PH data.",
+  "requestFramePermissions": []
+}
